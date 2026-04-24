@@ -6,8 +6,8 @@ import PromptInput from './components/PromptInput';
 import AnalysisOutput from './components/AnalysisOutput';
 import { Zap, Loader2, AlertCircle } from 'lucide-react';
 import ChatView from './components/ChatView';
+import { API_URL } from "./config";
 
-const API_URL = "http://127.0.0.1:8000";
 const POLL_INTERVAL_MS = 2000;
 
 function App() {
@@ -42,6 +42,9 @@ function App() {
             method: "POST",
             body: formData
         });
+        if (!res.ok) {
+            throw new Error("Upload failed");
+        }
 
         const data = await res.json();
         console.log("DATASET ID:", data.dataset_id);
@@ -85,8 +88,14 @@ function App() {
             setLoading(true);
             taskIdRef.current = task_id;
             pollingRef.current = true;
+            await new Promise(r => setTimeout(r, 3000));
 
-            while (pollingRef.current) {
+            let attempts = 0;
+            const MAX_ATTEMPTS = 30;
+
+            while (pollingRef.current && attempts < MAX_ATTEMPTS) {
+                attempts++;
+
                 await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
                 if (!pollingRef.current) break;
 
