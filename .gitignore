@@ -1,0 +1,23 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Env
+.env
+
+# Python (you have .venv, so include this)
+.venv/
+__pycache__/
+*.pyc
+
+# System files
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite
+.vite
