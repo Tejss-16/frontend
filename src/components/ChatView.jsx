@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { API_URL } from "./config";
+import { API_URL } from "../config";
 
 function ChatView({ datasetId }) {
     const [messages, setMessages] = useState([]);
