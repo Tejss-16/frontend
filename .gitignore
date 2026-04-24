@@ -21,3 +21,9 @@ yarn-error.log*
 
 # Vite
 .vite
+.vscode/
+node_modules/
+dist/
+.env
+.DS_Store
+.vscode/
