@@ -134,7 +134,19 @@ function BotMessage({ content }) {
                             {table.map((row, i) => (
                                 <tr key={i} className="hover:bg-white/5">
                                     {Object.values(row).map((val, j) => (
-                                        <td key={j} className="px-4 py-2 whitespace-nowrap">{val ?? '—'}</td>
+                                        <td key={j} className="px-4 py-2 whitespace-nowrap">
+                                        {typeof val === "object" && val !== null ? (
+                                            <div className="space-y-1">
+                                            {Object.entries(val).map(([k, v]) => (
+                                                <div key={k}>
+                                                <span className="text-slate-400">{k}:</span> {v}
+                                                </div>
+                                            ))}
+                                            </div>
+                                        ) : (
+                                            val ?? '—'
+                                        )}
+                                        </td>
                                     ))}
                                 </tr>
                             ))}

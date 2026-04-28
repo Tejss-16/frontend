@@ -1,10 +1,17 @@
+// src/App.jsx  (FIXED)
+//
+// CHANGE: dashboard now accumulates query results instead of replacing them.
+//   - analysisData  (single object) → queryHistory (array of {query, data})
+//   - Each new query APPENDS a new entry; previous results stay visible.
+//   - A "Clear All" button lets users wipe the history when needed.
+
 import React, { useState, useRef, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import FileInput from './components/FileInput';
 import PromptInput from './components/PromptInput';
 import AnalysisOutput from './components/AnalysisOutput';
-import { Zap, Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import ChatView from './components/ChatView';
 import { API_URL } from "./config";
 
@@ -17,7 +24,10 @@ function App() {
     const [activeView, setActiveView] = useState("upload");
     const [isCancelling, setIsCancelling] = useState(false);
     const [error, setError] = useState(null);
-    const [analysisData, setAnalysisData] = useState(null);
+
+    // CHANGE: array of { query: string, data: object } instead of a single analysisData
+    const [queryHistory, setQueryHistory] = useState([]);
+
     const [datasetId, setDatasetId] = useState(null);
 
     const taskIdRef = useRef(null);
@@ -42,13 +52,14 @@ function App() {
             method: "POST",
             body: formData
         });
-        if (!res.ok) {
-            throw new Error("Upload failed");
-        }
+        if (!res.ok) throw new Error("Upload failed");
 
         const data = await res.json();
         console.log("DATASET ID:", data.dataset_id);
         setDatasetId(data.dataset_id);
+
+        // Clear history when a new dataset is uploaded
+        setQueryHistory([]);
     };
 
     const handleAnalyze = useCallback(async () => {
@@ -56,12 +67,12 @@ function App() {
             alert("Upload a dataset first");
             return;
         }
-
         if (!prompt) {
             alert("Enter a prompt");
             return;
         }
 
+        // Cancel any in-flight task
         if (taskIdRef.current) {
             await fetch(`${API_URL}/cancel/${taskIdRef.current}`, { method: 'POST' }).catch(() => {});
         }
@@ -69,11 +80,13 @@ function App() {
         stopPolling();
         setIsCancelling(false);
         setError(null);
-        setAnalysisData(null);
+
+        // Snapshot the query string so we can label the result block
+        const currentQuery = prompt;
 
         const formData = new FormData();
         formData.append('dataset_id', datasetId);
-        formData.append('query', prompt);
+        formData.append('query', currentQuery);
 
         try {
             const startRes = await fetch(`${API_URL}/start-analysis`, {
@@ -88,31 +101,31 @@ function App() {
             setLoading(true);
             taskIdRef.current = task_id;
             pollingRef.current = true;
-            await new Promise(r => setTimeout(r, 3000));
 
             let attempts = 0;
-            const MAX_ATTEMPTS = 30;
+            const MAX_ATTEMPTS = 100;
 
             while (pollingRef.current && attempts < MAX_ATTEMPTS) {
                 attempts++;
-
                 await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-                if (!pollingRef.current) break;
 
                 const statusRes = await fetch(`${API_URL}/status/${task_id}`);
+                if (!statusRes.ok) throw new Error("Status API failed");
+
                 const result = await statusRes.json();
 
                 if (["completed", "cancelled", "error"].includes(result.status)) {
                     stopPolling();
 
                     if (result.status === "completed") {
-                        setAnalysisData(result.data);
+                        // CHANGE: append new result; do NOT clear previous ones
+                        setQueryHistory(prev => [
+                            ...prev,
+                            { query: currentQuery, data: result.data }
+                        ]);
                     }
 
-                    if (result.status === "error") {
-                        throw new Error(result.error);
-                    }
-
+                    if (result.status === "error") throw new Error(result.error);
                     break;
                 }
             }
@@ -127,12 +140,13 @@ function App() {
     const handleCancel = useCallback(() => {
         const taskId = taskIdRef.current;
         if (!taskId) return;
-
         setIsCancelling(true);
         stopPolling();
-
         fetch(`${API_URL}/cancel/${taskId}`, { method: 'POST' }).catch(() => {});
     }, []);
+
+    // CHANGE: clear all accumulated results
+    const handleClearHistory = () => setQueryHistory([]);
 
     return (
         <div className="flex min-h-screen bg-[#0b0f19] text-white">
@@ -146,14 +160,14 @@ function App() {
 
                         {/* UPLOAD VIEW */}
                         {activeView === "upload" && (
-                            <div className="flex justify-center items-center h-full">
+                            <div className="flex flex-col justify-center items-center h-full gap-4">
                                 <FileInput
                                     file={file}
                                     setFile={setFile}
                                     onUpload={handleUpload}
                                 />
                                 {datasetId && (
-                                    <p className="text-green-400 mt-4">
+                                    <p className="text-green-400">
                                         Dataset uploaded successfully
                                     </p>
                                 )}
@@ -168,7 +182,6 @@ function App() {
                                 </div>
 
                                 <div className="flex justify-center mb-12 gap-4">
-
                                     {/* Execute */}
                                     <button
                                         onClick={handleAnalyze}
@@ -188,9 +201,31 @@ function App() {
                                         </button>
                                     )}
 
+                                    {/* CHANGE: clear history button */}
+                                    {queryHistory.length > 0 && !loading && (
+                                        <button
+                                            onClick={handleClearHistory}
+                                            className="bg-white/5 border border-white/10 px-8 py-5 rounded-xl hover:bg-white/10 transition text-slate-400 hover:text-white"
+                                        >
+                                            Clear All
+                                        </button>
+                                    )}
                                 </div>
 
-                                <AnalysisOutput data={analysisData} loading={loading} />
+                                {/* Error display */}
+                                {error && (
+                                    <div className="flex items-center gap-2 text-red-400 mb-4 p-3 bg-red-950/20 rounded-xl border border-red-500/20">
+                                        <AlertCircle size={16} />
+                                        <span className="text-sm">{error}</span>
+                                    </div>
+                                )}
+
+                                {/* CHANGE: pass queryHistory + loading instead of single analysisData */}
+                                <AnalysisOutput
+                                    queryHistory={queryHistory}
+                                    loading={loading}
+                                    currentQuery={prompt}
+                                />
                             </>
                         )}
 

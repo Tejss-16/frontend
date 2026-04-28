@@ -1,13 +1,42 @@
+// src/components/FileInput.jsx
+
 import React, { useRef, useState } from 'react';
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
 
 const FileInput = ({ file, setFile, onUpload }) => {
     const fileInputRef = useRef(null);
     const [isUploading, setIsUploading] = useState(false);
+    // FIX: added upload error state so the user sees failures instead of silent nothing
+    const [uploadError, setUploadError] = useState(null);
 
     const clearFile = () => {
         setFile(null);
+        setUploadError(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleFileChange = async (e) => {
+        const selectedFile = e.target.files[0];
+        if (!selectedFile) return;
+
+        setFile(selectedFile);
+        setUploadError(null);
+
+        if (onUpload) {
+            setIsUploading(true);
+            try {
+                // FIX: onUpload was not awaited — async errors were silently swallowed.
+                // Now we await it and surface any thrown error to the user.
+                await onUpload(selectedFile);
+            } catch (err) {
+                setUploadError(err?.message ?? 'Upload failed. Please try again.');
+                // Clear the file so user can retry cleanly
+                setFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            } finally {
+                setIsUploading(false);
+            }
+        }
     };
 
     return (
@@ -37,16 +66,11 @@ const FileInput = ({ file, setFile, onUpload }) => {
                     <input
                         type="file"
                         ref={fileInputRef}
-                        onChange={(e) => {
-                            const selectedFile = e.target.files[0];
-                            if (!selectedFile) return;
-                            setFile(selectedFile);
-                            if (onUpload) {
-                                onUpload(selectedFile);
-                            }
-                        }}
+                        onChange={handleFileChange}
                         className="hidden"
-                        accept=".csv,.xlsx,.json"
+                        // FIX: removed .json — the backend only accepts .csv and .xlsx.
+                        // Accepting .json in the UI led to a confusing 400 error from the server.
+                        accept=".csv,.xlsx"
                     />
                     <div className="p-5 bg-blue-500/10 text-blue-500 rounded-2xl mb-4 border border-blue-500/20 shadow-glow">
                         <Upload size={32} />
@@ -60,10 +84,15 @@ const FileInput = ({ file, setFile, onUpload }) => {
                     >
                         Browse File
                     </button>
+
+                    {/* FIX: show upload errors below the button */}
+                    {uploadError && (
+                        <p className="mt-4 text-sm text-red-400 text-center">{uploadError}</p>
+                    )}
+
                     <div className="mt-8 flex items-center gap-3">
                         <span className="px-2 py-1 bg-white/5 rounded text-[9px] font-bold text-slate-500 border border-white/5 tracking-tighter uppercase">CSV</span>
                         <span className="px-2 py-1 bg-white/5 rounded text-[9px] font-bold text-slate-500 border border-white/5 tracking-tighter uppercase">Excel</span>
-                        <span className="px-2 py-1 bg-white/5 rounded text-[9px] font-bold text-slate-500 border border-white/5 tracking-tighter uppercase">JSON</span>
                     </div>
                 </div>
             )}
