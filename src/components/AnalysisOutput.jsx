@@ -443,7 +443,19 @@ function renderChart(chart, height) {
             line: { width: 3, color: THEME.colors.line, shape: 'spline', smoothing: 0.8 },
             marker: { size: 5, color: THEME.colors.line },
           }];
-      return <ScrollPlot data={traces} layout={layout} style={{ width: '100%' }} />;
+      // Show fallback banner when redirected from funnel (or another type)
+      const fallbackBanner = chart.fallback_from ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '6px 12px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', fontSize: 11, color: '#fbbf24', fontWeight: 500 }}>
+          <span style={{ flexShrink: 0 }}>ℹ</span>
+          <span>Funnel not applicable — showing line chart instead{chart.fallback_reason ? ` (${chart.fallback_reason})` : ''}</span>
+        </div>
+      ) : null;
+      return (
+        <div>
+          {fallbackBanner}
+          <ScrollPlot data={traces} layout={layout} style={{ width: '100%' }} />
+        </div>
+      );
     }
 
     case 'area': {
@@ -479,12 +491,22 @@ function renderChart(chart, height) {
             type: 'bar', orientation: isH ? 'h' : 'v',
             marker: { color: THEME.colors.series, opacity: 0.92, line: { width: 0 } },
           }];
+      // FIX 4: When bar is a fallback from funnel show an inline info banner.
+      const fallbackBanner = chart.fallback_from ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '6px 12px', borderRadius: 10, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', fontSize: 11, color: '#fbbf24', fontWeight: 500 }}>
+          <span style={{ flexShrink: 0 }}>ℹ</span>
+          <span>Funnel not applicable — showing bar chart instead{chart.fallback_reason ? ` (${chart.fallback_reason})` : ''}</span>
+        </div>
+      ) : null;
       return (
-        <ScrollPlot
-          data={traces}
-          layout={{ ...layout, barmode: 'group', bargap: 0.25, bargroupgap: 0.08, margin: { ...layout.margin, l: isH ? 150 : 60 }, xaxis: { ...layout.xaxis, tickangle: hasLongLabels ? -35 : 0 } }}
-          style={{ width: '100%' }}
-        />
+        <div>
+          {fallbackBanner}
+          <ScrollPlot
+            data={traces}
+            layout={{ ...layout, barmode: 'group', bargap: 0.25, bargroupgap: 0.08, margin: { ...layout.margin, l: isH ? 150 : 60 }, xaxis: { ...layout.xaxis, tickangle: hasLongLabels ? -35 : 0 } }}
+            style={{ width: '100%' }}
+          />
+        </div>
       );
     }
 
@@ -651,23 +673,130 @@ function renderChart(chart, height) {
         />
       );
 
-    case 'heatmap':
+    case 'heatmap': {
+      // Build the cell annotation text layer (only present when grid ≤ 10×10).
+      // Each cell shows its formatted raw value so readers don't have to guess
+      // from color alone — critical for business dashboards.
+      const annotations = [];
+      if (Array.isArray(chart.cell_annotations)) {
+        chart.cell_annotations.forEach((row, ri) => {
+          row.forEach((val, ci) => {
+            annotations.push({
+              x:          chart.x[ci],
+              y:          chart.y[ri],
+              text:       val != null ? fmtNum(val) : '',
+              showarrow:  false,
+              font:       { color: '#e2e8f0', size: 10 },
+              xref:       'x',
+              yref:       'y',
+            });
+          });
+        });
+      }
+
+      // Color scale: deep purple → indigo → lavender.
+      // High contrast between min and max so differences are immediately visible.
+      // Avoid washed-out single-hue gradients that make everything look similar.
+      const colorscale = [
+        [0,    '#0f0a2e'],
+        [0.15, '#1e1b4b'],
+        [0.35, '#3730a3'],
+        [0.55, '#6366f1'],
+        [0.75, '#a5b4fc'],
+        [1,    '#e0e7ff'],
+      ];
+
+      // Label the color bar correctly: if log scale was applied on the backend,
+      // tell the reader the axis is log1p-transformed so they aren't misled.
+      const colorbarTitle = chart.use_log_scale
+        ? `${chart.z_label ?? 'Value'} (log scale)`
+        : (chart.z_label ?? 'Value');
+
       return (
         <ScrollPlot
-          data={[{ x: chart.x, y: chart.y, z: chart.z, type: 'heatmap', colorscale: [[0,'#1e1b4b'],[0.25,'#3730a3'],[0.5,'#6366f1'],[0.75,'#a5b4fc'],[1,'#e0e7ff']], showscale: true, colorbar: { tickfont: { color: THEME.font.muted, size: 10 }, thickness: 12 } }]}
-          layout={{ ...layout, xaxis: { ...layout.xaxis, tickangle: hasLongLabels ? -40 : 0 }, margin: { ...layout.margin, b: hasLongLabels ? 90 : 56, r: 60 } }}
+          data={[{
+            x:          chart.x,
+            y:          chart.y,
+            z:          chart.z,
+            type:       'heatmap',
+            colorscale,
+            showscale:  true,
+            colorbar: {
+              title:    { text: colorbarTitle, font: { color: THEME.font.muted, size: 10 }, side: 'right' },
+              tickfont: { color: THEME.font.muted, size: 10 },
+              thickness: 14,
+              len:       0.85,
+            },
+            hovertemplate: `<b>%{y}</b> × <b>%{x}</b><br>${chart.z_label ?? 'Value'}: %{z:.2f}<extra></extra>`,
+            xgap:  1.5,   // small gaps between cells improve readability
+            ygap:  1.5,
+          }]}
+          layout={{
+            ...layout,
+            annotations,                       // cell value text labels
+            xaxis: {
+              ...layout.xaxis,
+              tickangle: hasLongLabels ? -40 : 0,
+              title: { text: chart.x_label ?? '', font: { size: THEME.font.size.axis, color: THEME.font.muted } },
+            },
+            yaxis: {
+              ...layout.yaxis,
+              title: { text: chart.y_label ?? '', font: { size: THEME.font.size.axis, color: THEME.font.muted } },
+              autorange: 'reversed',           // keep sorted order top-to-bottom
+            },
+            margin: { ...layout.margin, b: hasLongLabels ? 100 : 60, r: 80 },
+          }}
           style={{ width: '100%' }}
         />
+      );
+    }
+
+    case 'funnel': {
+      // Build per-step custom text showing step-over-step conversion rate.
+      // For the first step show the absolute value; for subsequent steps show
+      // the conversion % from the prior step and flag the biggest drop-off.
+      const convPcts    = chart.conversion_pcts ?? [];
+      const dropIdx     = chart.biggest_drop_idx ?? null;
+      const customText  = (chart.x ?? []).map((_, i) => {
+        if (i === 0) return fmtNum(chart.y[i]);
+        const pct  = convPcts[i];
+        const base = pct != null ? `${pct}% from prev` : fmtNum(chart.y[i]);
+        return i === dropIdx ? `⚠ ${base}` : base;
+      });
+
+      // Highlight the biggest drop-off step with a distinct red marker color;
+      // keep all other steps in the same indigo tone (1–2 colors max).
+      const markerColors = (chart.x ?? []).map((_, i) =>
+        i === dropIdx ? '#EF4444' : '#6366F1'
       );
 
-    case 'funnel':
       return (
         <ScrollPlot
-          data={[{ type: 'funnel', y: chart.x, x: chart.y, marker: { color: THEME.colors.series }, textinfo: 'value+percent initial', textfont: { color: '#e2e8f0' }, connector: { fillcolor: 'rgba(99,102,241,0.15)' } }]}
-          layout={{ ...layout, funnelmode: 'stack' }}
+          data={[{
+            type:       'funnel',
+            y:          chart.x,          // stages on y-axis (horizontal funnel)
+            x:          chart.y,          // values on x-axis
+            text:       customText,
+            textinfo:   'text',           // show our custom text only (no redundant percent initial)
+            textfont:   { color: '#e2e8f0', size: 12 },
+            marker: {
+              color: markerColors,
+              line:  { color: 'rgba(0,0,0,0.3)', width: 1 },
+            },
+            connector:  { fillcolor: 'rgba(99,102,241,0.10)' },
+            hovertemplate: '<b>%{y}</b><br>Value: %{x}<extra></extra>',
+          }]}
+          layout={{
+            ...layout,
+            // Remove funnelmode: 'stack' — single-series funnels should be
+            // rendered as a plain funnel (not stacked), which shows the
+            // narrowing shape that communicates drop-off.
+            margin: { ...layout.margin, l: 160, r: 40 },
+          }}
           style={{ width: '100%' }}
         />
       );
+    }
 
     case 'treemap':
       return (

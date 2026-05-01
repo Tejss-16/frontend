@@ -116,6 +116,18 @@ function BotMessage({ content }) {
 
     const { answer, table, error } = content;
 
+    // ── Check if this is a structured summary report ──────────────────────
+    if (answer && typeof answer === "string") {
+        try {
+            const parsed = JSON.parse(answer);
+            if (parsed?.report_type === "summary") {
+                return <SummaryReport report={parsed} />;
+            }
+        } catch (_) {
+            // not JSON, fall through to normal rendering
+        }
+    }
+
     return (
         <>
             <p className="leading-relaxed whitespace-pre-wrap">{answer}</p>
@@ -159,6 +171,101 @@ function BotMessage({ content }) {
                 <p className="text-red-400 text-xs mt-1">⚠️ Table could not be generated: {error}</p>
             )}
         </>
+    );
+}
+
+// ── Rich Summary Report Renderer ────────────────────────────────────────────
+function SummaryReport({ report }) {
+    const {
+        title,
+        overview,
+        date_range,
+        key_metrics = [],
+        sections = [],
+        recommendations = [],
+    } = report;
+
+    return (
+        <div className="space-y-5 text-sm w-full">
+
+            {/* Title */}
+            <div className="border-b border-white/10 pb-3">
+                <h2 className="text-base font-bold text-white leading-snug">{title}</h2>
+                {date_range && (
+                    <p className="text-xs text-slate-400 mt-0.5">📅 {date_range}</p>
+                )}
+            </div>
+
+            {/* Overview */}
+            {overview && (
+                <p className="text-slate-300 leading-relaxed">{overview}</p>
+            )}
+
+            {/* Key Metrics Grid */}
+            {key_metrics.length > 0 && (
+                <div>
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Key Metrics</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                        {key_metrics.map((m, i) => (
+                            <div key={i} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                <div className="text-slate-400 text-xs truncate">{m.label}</div>
+                                <div className="text-white font-semibold text-base mt-0.5">{m.value}</div>
+                                {m.note && <div className="text-slate-500 text-xs mt-0.5 leading-tight">{m.note}</div>}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Sections */}
+            {sections.map((section, si) => (
+                <div key={si}>
+                    <h3 className="text-sm font-semibold text-blue-300 mb-1.5">{section.heading}</h3>
+                    {section.body && (
+                        <p className="text-slate-300 leading-relaxed mb-2">{section.body}</p>
+                    )}
+                    {section.subsections && section.subsections.length > 0 && (
+                        <div className="space-y-2 ml-0">
+                            {section.subsections.map((sub, ssi) => (
+                                <div key={ssi} className="bg-white/4 border border-white/8 rounded-xl px-3 py-2.5">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="font-medium text-slate-200 text-xs">{sub.name}</span>
+                                        {sub.note && (
+                                            <span className="text-slate-500 text-xs italic max-w-[55%] text-right leading-tight">{sub.note}</span>
+                                        )}
+                                    </div>
+                                    {sub.stats && sub.stats.length > 0 && (
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                            {sub.stats.map((stat, sti) => (
+                                                <span key={sti} className="text-xs">
+                                                    <span className="text-slate-400">{stat.label}: </span>
+                                                    <span className="text-slate-200 font-medium">{stat.value}</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ))}
+
+            {/* Recommendations */}
+            {recommendations.length > 0 && (
+                <div>
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Strategic Recommendations</h3>
+                    <div className="space-y-1.5">
+                        {recommendations.map((rec, i) => (
+                            <div key={i} className="flex gap-2 text-slate-300">
+                                <span className="text-blue-400 font-bold shrink-0">{i + 1}.</span>
+                                <span className="leading-snug">{rec}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
