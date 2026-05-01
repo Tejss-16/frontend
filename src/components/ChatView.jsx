@@ -181,65 +181,98 @@ function SummaryReport({ report }) {
         overview,
         date_range,
         key_metrics = [],
+        highlights = [],
         sections = [],
         recommendations = [],
     } = report;
 
     return (
-        <div className="space-y-5 text-sm w-full">
+        <div className="w-full text-sm space-y-6">
 
-            {/* Title */}
-            <div className="border-b border-white/10 pb-3">
-                <h2 className="text-base font-bold text-white leading-snug">{title}</h2>
-                {date_range && (
-                    <p className="text-xs text-slate-400 mt-0.5">📅 {date_range}</p>
-                )}
+            {/* Header — title + date as quiet context, not emphasis */}
+            <div>
+                <p className="text-xs text-slate-500 uppercase tracking-widest mb-1 font-medium">
+                    Analysis
+                    {date_range ? ` · ${date_range}` : ""}
+                </p>
+                <h2 className="text-[15px] font-semibold text-white leading-snug">{title}</h2>
             </div>
 
-            {/* Overview */}
+            {/* Overview — the story, big and readable */}
             {overview && (
-                <p className="text-slate-300 leading-relaxed">{overview}</p>
+                <p className="text-slate-200 leading-relaxed text-[14px] border-l-2 border-blue-500/60 pl-3">
+                    {overview}
+                </p>
             )}
 
-            {/* Key Metrics Grid */}
+            {/* Highlights — the "wow" moments, visually distinct */}
+            {highlights.length > 0 && (
+                <div className="space-y-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-medium">Key Findings</p>
+                    {highlights.map((h, i) => (
+                        <div key={i} className="flex gap-2.5 items-start">
+                            <span className="mt-[3px] shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400/80" />
+                            <p className="text-slate-200 leading-snug">{h}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Key Metrics — compact, only the most important 3-5 */}
             {key_metrics.length > 0 && (
                 <div>
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Key Metrics</h3>
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-medium mb-2">The Numbers</p>
                     <div className="grid grid-cols-2 gap-2">
-                        {key_metrics.map((m, i) => (
-                            <div key={i} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
-                                <div className="text-slate-400 text-xs truncate">{m.label}</div>
-                                <div className="text-white font-semibold text-base mt-0.5">{m.value}</div>
-                                {m.note && <div className="text-slate-500 text-xs mt-0.5 leading-tight">{m.note}</div>}
+                        {key_metrics.slice(0, 6).map((m, i) => (
+                            <div key={i} className={`rounded-xl px-3 py-2.5 border ${
+                                i === 0
+                                    ? "border-blue-500/30 bg-blue-500/8 col-span-2"
+                                    : "border-white/8 bg-white/4"
+                            }`}>
+                                <p className="text-slate-400 text-xs">{m.label}</p>
+                                <p className={`font-bold text-white ${i === 0 ? "text-xl mt-0.5" : "text-base mt-0.5"}`}>
+                                    {m.value}
+                                </p>
+                                {m.plain_note && (
+                                    <p className="text-slate-500 text-xs mt-1 leading-snug">{m.plain_note}</p>
+                                )}
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            {/* Sections */}
+            {/* Sections — only the meaningful breakdowns */}
             {sections.map((section, si) => (
-                <div key={si}>
-                    <h3 className="text-sm font-semibold text-blue-300 mb-1.5">{section.heading}</h3>
+                <div key={si} className="space-y-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-widest font-medium">
+                        {section.heading}
+                    </p>
+
+                    {/* Plain-English story for this section */}
                     {section.body && (
-                        <p className="text-slate-300 leading-relaxed mb-2">{section.body}</p>
+                        <p className="text-slate-300 leading-relaxed">{section.body}</p>
                     )}
+
+                    {/* Subsections — only winners/losers worth naming */}
                     {section.subsections && section.subsections.length > 0 && (
-                        <div className="space-y-2 ml-0">
+                        <div className="space-y-1.5 mt-1">
                             {section.subsections.map((sub, ssi) => (
-                                <div key={ssi} className="bg-white/4 border border-white/8 rounded-xl px-3 py-2.5">
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <span className="font-medium text-slate-200 text-xs">{sub.name}</span>
-                                        {sub.note && (
-                                            <span className="text-slate-500 text-xs italic max-w-[55%] text-right leading-tight">{sub.note}</span>
+                                <div key={ssi} className="rounded-xl border border-white/8 bg-white/3 px-3 py-2.5">
+                                    {/* Name + verdict on same line when short, stacked when long */}
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1.5">
+                                        <span className="text-white font-medium text-xs">{sub.name}</span>
+                                        {sub.verdict && (
+                                            <span className="text-slate-400 text-xs leading-snug">— {sub.verdict}</span>
                                         )}
                                     </div>
+                                    {/* Stats: only 2-3, small and secondary */}
                                     {sub.stats && sub.stats.length > 0 && (
-                                        <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                            {sub.stats.map((stat, sti) => (
-                                                <span key={sti} className="text-xs">
-                                                    <span className="text-slate-400">{stat.label}: </span>
-                                                    <span className="text-slate-200 font-medium">{stat.value}</span>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                            {sub.stats.slice(0, 3).map((stat, sti) => (
+                                                <span key={sti} className="text-xs text-slate-500">
+                                                    {stat.label}:{" "}
+                                                    <span className="text-slate-300 font-medium">{stat.value}</span>
                                                 </span>
                                             ))}
                                         </div>
@@ -251,18 +284,16 @@ function SummaryReport({ report }) {
                 </div>
             ))}
 
-            {/* Recommendations */}
+            {/* Recommendations — action-oriented, plain English */}
             {recommendations.length > 0 && (
-                <div>
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Strategic Recommendations</h3>
-                    <div className="space-y-1.5">
-                        {recommendations.map((rec, i) => (
-                            <div key={i} className="flex gap-2 text-slate-300">
-                                <span className="text-blue-400 font-bold shrink-0">{i + 1}.</span>
-                                <span className="leading-snug">{rec}</span>
-                            </div>
-                        ))}
-                    </div>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 space-y-2">
+                    <p className="text-xs text-amber-400/80 uppercase tracking-widest font-medium">What to do next</p>
+                    {recommendations.map((rec, i) => (
+                        <div key={i} className="flex gap-2.5 items-start">
+                            <span className="text-amber-400/60 font-bold text-xs shrink-0 mt-0.5">{i + 1}</span>
+                            <p className="text-slate-300 leading-snug text-[13px]">{rec}</p>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
